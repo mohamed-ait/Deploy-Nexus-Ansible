@@ -1,0 +1,6 @@
+nexus_url: https://download.sonatype.com/nexus/3/latest-unix.tar.gz
+path_nexus: /opt
+directories: ["/opt/nexus","/opt/sonatype-work"]
+   
+   
+   

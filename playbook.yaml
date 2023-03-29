@@ -1,0 +1,119 @@
+---
+
+# paly 1 
+- name: Install java and net-tools
+  hosts: my-server
+  tasks:
+  # execute the apt udpdate command to uddate the repo and the cache :
+    - name: update apt repo and cache
+      apt: update_cache=yes force_apt_get=yes cache_valid_time=3600 
+    - name: install java and net-tools
+      apt:
+        pkg:
+          - openjdk-8-jre-headless
+          - net-tools
+  # paly 2
+- name : Download and unpack nexus installer
+  hosts: my-server
+  vars_files:
+    - vars.yaml
+  tasks:
+ # check if the file already exist 
+    - name: Check if the zip exist already brfore download it 
+      stat:
+        path: "{{path_nexus}}/nexus-3.50.0-01-unix.tar.gz"
+      register: file_status
+ # dwnload nexus from web 
+    - name : Download nexus
+      get_url:
+        url: "{{nexus_url}}"
+        dest: "{{path_nexus}}"
+      register: downloading_status
+      when: not file_status.stat.exists
+ # find the nexus folder 
+    - name: find the nexus folder
+      find:
+        path: "{{path_nexus}}"
+        pattern: "nexus-*"
+        file_type: directory
+      register: file_name
+ # verify if the nexus folder exist : 
+    - name: Check if the nexus file already exist 
+      stat:
+        path: "/opt/nexus"
+      register: file_status
+ # untar the downloaded file
+    - name: untar the nexus installer file 
+      unarchive: 
+        src: "{{path_nexus}}/nexus-3.50.0-01-unix.tar.gz}}"
+        dest: "{{path_nexus}}"
+      when: not file_status.stat.exists
+ # rename the untared folder 
+    - name: Rename the nexus folder 
+      shell: mv {{file_name.files[0].path}} /opt/nexus
+      when: not file_status.stat.exists
+# Ensure nexus group exist : ansible will check if the group exist if not it will create it 
+    - name: Ensure nexus group exist
+      group:
+        name: nexus
+        state: present
+# paly 3 
+# create nexus user : 
+- name: Create nexus user
+  hosts: my-server
+  vars_files:
+    - vars.yaml
+  tasks:
+    - name: Create nexus user 
+      user:
+        name: nexus
+        comment: nexus user
+        group: nexus
+# change owner of nexus folders :
+    - name: Change owner of nexus folders 
+      file:
+        path: "{{item}}"
+        owner: nexus
+        group: nexus
+        state: directory
+        recurse: yes  # -R option 
+      loop: "{{directories}}"
+# paly 4
+- name: Start nexus with nexus user
+  hosts: my-server
+  become: true #allow t become another user 
+  become_user: nexus
+  tasks:
+  #Set the nexus user inside the  
+    - name: Set run_as_user nexus 
+      blockinfile: 
+        path: /opt/nexus/bin/nexus.rc
+        block:
+           run_as_user="nexus"
+  #Start nexus 
+    - name: start nexus
+      command: /opt/nexus/bin/nexus start  
+  #Play 5
+- name : Verify nexus running
+  hosts: my-server
+  become: true
+  become_user: nexus
+  tasks:
+  # check with ps
+    - name: Check with ps 
+      shell: ps aux | grep nexus
+      register: nexus_status
+    - debug: msg={{nexus_status}}
+  #wait for one minute
+    - name: Wait one minute
+      pause:
+        minutes: 1
+  # check with netstat 
+    - name: Check with netstat
+      shell: netstat -lnpt
+      register: nexus_stat
+    - debug: msg={{nexus_stat}}
+
+
+
+
